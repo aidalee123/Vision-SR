@@ -1,0 +1,129 @@
+# =============================================================================
+# Paths & Global Settings
+# =============================================================================
+train_path: data/train_data/10vars/100000
+val_path: data/val_data/10vars/1000
+test_path: data/val_data/10vars/1000
+# 请确保此路径指向您实际存在的 ckpt 文件
+model_path: C:\Users\lida\Desktop\visymre_10\scripts\weights\Weight.ckpt
+wandb: True
+num_of_workers: 20
+val_check_interval: 0.5
+precision: 16
+gpu: cuda
+device: "cpu"
+
+# =============================================================================
+# Dataset Configurations
+# =============================================================================
+dataset_train:
+  input_channels: 3
+  num_variables: 1
+  n_clusters : 1
+  funimage_size: 224
+  max_retry: 3               # 允许的最大重采样次数
+  eps_limit: 1e30           # 数值溢出判据
+  total_variables: #Do not fill
+  total_coefficients: #Do not fill
+  max_number_of_points: 200  #2000 before
+  type_of_sampling_points: constant
+  predict_c: True
+  constants:
+    num_constants: 3
+    additive:
+      max: 1
+      min: -1
+    multiplicative:
+      max: 1
+      min: -1
+
+dataset_val:
+  input_channels: 3
+  num_variables: 1
+  n_clusters : 1
+  funimage_size: 224
+  max_retry: 10                 # 允许的最大重采样次数
+  eps_limit: 1e100           # 数值溢出判据
+  total_variables: #Do not fill
+  total_coefficients: #Do not fill
+  max_number_of_points: 200
+  type_of_sampling_points: constant
+  predict_c: True
+  constants:
+    num_constants: 3
+    additive:
+      max: 1
+      min: -1
+    multiplicative:
+      max: 1
+      min: -1
+
+dataset_test:
+  input_channels: 3
+  num_variables: 2
+  n_clusters : 1
+  funimage_size: 224
+  max_retry: 8                 # 允许的最大重采样次数
+  eps_limit: 1e30            # 数值溢出判据
+  total_variables: #Do not fill
+  total_coefficients: #Do not fill constant
+  max_number_of_points: 200
+  type_of_sampling_points: constant
+  predict_c: True
+  constants:
+    num_constants: 3
+    additive:
+      max: 1
+      min: -1
+    multiplicative:
+      max: 1
+      min: -1
+
+# =============================================================================
+# Model Architecture
+# =============================================================================
+architecture:
+  num_inds: 50
+  batch_size: 200
+  epochs: 30
+  points_dim_input: 187
+  bias_proj_dim: 64
+  dim_hidden: 512
+  dec_layers: 8
+  n_l_points_encoder: 4
+  n_l_fus: 4
+  n_l_vvd: 3
+  num_patches: 16
+  top_k: 1
+  lr: 0.0003
+  src_pad_idx: 0
+  trg_pad_idx: 0
+  output_dim: 100
+  length_eq: 100
+  dim_input: 11
+  num_heads: 8
+  codebook_size: 4096
+  input_channels: 3
+
+# =============================================================================
+# Inference & BFGS Settings
+# =============================================================================
+inference:
+  lr: 0.01
+  n_steps: 10000
+  beam_size: 100
+  device: "cpu"
+  no_c_in_pow: False
+
+  bfgs:
+    activated: True
+    n_restarts: 20
+    add_coefficients_if_not_existing: False
+    normalization_o: False
+    idx_remove: False
+    normalization_type: MSE
+    stop_time: 1e9
+
+hydra:
+  run:
+    dir: results/
