@@ -172,7 +172,7 @@ def constants_to_placeholder(s, symbol="c"):
 
     sympy_expr = (sympify(s))
     # print("sympy_expr",sympy_expr)
-    sympy_expr = (sympify(sympy_expr))
+    #sympy_expr = (sympify(sympy_expr))
     # print("sympy",sympy_expr)
     # save_to_csv(sympy_expr)
     eq_sympy_infix = sympy_expr.xreplace(
@@ -270,7 +270,7 @@ def sample_support(curr_p, cfg, n_clusters):
         selected_min, selected_max = sorted((bound1, bound2))
         rand_mode = random.random()
         if rand_mode < 0.5:
-            exponent_dist = torch.distributions.Uniform(float(-5), float(5))
+            exponent_dist = torch.distributions.Uniform(float(selected_min), float(selected_max))
             exponents = exponent_dist.sample([int(curr_points_count)])
             points_curr = torch.exp(exponents)
         else:
@@ -441,7 +441,7 @@ def return_y(eq, support):
     else:
         y = eq_numpy(*support[0:len(eq.variables), :])
     if np.random.rand() < 1:  # 100%的几率添加噪声
-        target_noise = np.random.choice([0, 0.01, 0.1])
+        target_noise = random.uniform(0, 0.1)
         valid_y = y[~torch.isnan(y)]
         if valid_y.numel() > 0:  # 确保有有效数据
             scale = target_noise * torch.sqrt(torch.mean(torch.square(valid_y))).item()
