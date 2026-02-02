@@ -25,8 +25,8 @@ import torch.nn.functional as F
 
 def round_if_needed(val):
     """
-    对一个 sympy 的数字进行四舍五入：保留一位小数，
-    如果小数部分为 0，则返回整数类型。
+    Round a sympy number: keep one decimal place.
+    If the decimal part is 0, return Integer type.
     """
     num = float(val)
     rounded = round(num, 1)
@@ -37,17 +37,17 @@ def round_if_needed(val):
 
 def process_expr(expr, in_exponent=False):
     """
-    递归遍历 sympy 表达式 expr，寻找数字常数，
-    如果不在指数位置则进行四舍五入处理。
+    Recursively traverse sympy expression expr, looking for numeric constants.
+    Round them if they are not in an exponent position.
 
-    参数：
-      expr: sympy 表达式
-      in_exponent: 布尔型，指示当前 expr 是否处在幂（Pow）的指数位置
-    返回：
-      经过处理后的表达式
+    Args:
+      expr: sympy expression
+      in_exponent: boolean, indicates if current expr is in the exponent of a Pow
+    Returns:
+      Processed expression
     """
-    # 如果 expr 是原子对象（Atom），则直接返回，
-    # 因为原子对象（包括 Symbol 或其他常量）不需要遍历其子节点
+    # If expr is an Atom (including Symbol or other constants), return directly
+    # because Atoms do not need traversal of sub-nodes.
     if expr.is_Atom:
         if expr.is_number and expr.free_symbols == set() and not in_exponent:
             try:
@@ -56,13 +56,13 @@ def process_expr(expr, in_exponent=False):
                 return expr
         return expr
 
-    # 专门处理 Pow：保持指数原样，处理底数
+    # Handle Pow: keep exponent, process base
     if expr.func == sp.Pow:
         base = process_expr(expr.args[0])
-        exponent = process_expr(expr.args[1])  # 这里将指数也进行处理
+        exponent = process_expr(expr.args[1])  # Process exponent as well
         return sp.Pow(base, exponent)
 
-    # 对于其它表达式，递归处理其所有子节点
+    # For other expressions, recursively process all arguments
     new_args = tuple(process_expr(arg, in_exponent=False) for arg in expr.args)
     return expr.func(*new_args)
 
@@ -91,7 +91,7 @@ def sample_points(func, num_vars, range_, target_noise):
     # print(x.shape)
     y = evaluate_points(func, x[:,0:num_vars])
 
-    y = np.squeeze(y)  # 保证 y 是一维
+    y = np.squeeze(y)  # Ensure y is 1D
     is_valid = np.isfinite(y)
     x = x[is_valid]
     y = y[is_valid]
@@ -99,7 +99,7 @@ def sample_points(func, num_vars, range_, target_noise):
     if len(y) < 10:
         raise ValueError("Too few valid samples after removing NaN/Inf.")
 
-    # 添加噪声
+    # Add noise
     scale = target_noise * np.sqrt(np.mean(np.square(y)))
     rng = np.random.RandomState()
     noise = rng.normal(loc=0.0, scale=scale, size=y.shape)
@@ -122,21 +122,21 @@ import re
 
 
 def get_variable_names(expr: str):
-    # 找出所有变量 x_数字
+    # Find all variables x_number
     variables = re.findall(r'x_\d+', expr)
 
-    # 去重并按编号排序
+    # Deduplicate and sort by index
     unique_vars = sorted(set(variables), key=lambda x: int(x.split('_')[1]))
 
     return unique_vars
 def pad_to_10_columns(tensor):
-    # 检查形状是否为 [200, n]
+    # Check if shape is [200, n]
     n = tensor.size(1)
 
-    # 计算需要补多少列
+    # Calculate how many columns to pad
     pad_cols = 10 - n
 
-    # 用0补在右侧（dim=1）
+    # Pad with 0 on the right (dim=1)
     padded_tensor = F.pad(tensor, (0, pad_cols), mode='constant', value=0)
 
     return padded_tensor
@@ -145,7 +145,7 @@ def pad_to_10_columns(tensor):
 @hydra.main(config_name="config",version_base = '1.1')
 def main(cfg):
     # print(hydra.utils.to_absolute_path(cfg.val_path))
-    test_data = load_metadata_hdf5("/home/lida/Desktop/visymre_no10v/scripts/data/val_data/10vars/500")
+    test_data = load_metadata_hdf5(r"C:\Users\lida\Desktop\visymre_10\scripts\weights\meta")
     # print(test_data.id2word)
     bfgs = BFGSParams(
         activated=cfg.inference.bfgs.activated,
@@ -174,10 +174,9 @@ def main(cfg):
     model.eval()
     model.to(cfg.inference.device)
     fitfunc = partial(model.fitfunc2, cfg_params=params_fit)
-    # 确保batch有效
+    # Ensure batch is valid
 
-    # expr = "2-2.1*cos(9.8*x_1)*sin(1.3*x_2)"
-    expr = "1/(1+1/(x_2**4))+1/(1+1/(x_1**4))"
+    expr = "x_1+x_2"
     range_ = [-1,1]
     sym_eq = sympify(expr)
     variables = get_variable_names(str(expr))
@@ -187,13 +186,13 @@ def main(cfg):
     points = torch.tensor(points)
     y_no_noise = torch.tensor(y_no_noise)
 
-    # 注意：假设 pad_to_10_columns 可处理 points 的维度
+    # Note: Assuming pad_to_10_columns can handle the dimensions of points
     X = pad_to_10_columns(points[:, :-1]).to(cfg.inference.device)
     y = points[:, -1].to(cfg.inference.device)
 
     X_dict = {var: X[:, idx].cpu() for idx, var in enumerate(variables)}
 
-    # 尝试不同的 beam_size 值，依次为 3, 10, 20
+    # Try different beam_size values, sequentially 3, 10, 20
     # # print("X",X.shape)
     output = fitfunc(X, y, cfg_params=cfg.inference, test_data=test_data)
 
@@ -207,7 +206,3 @@ def main(cfg):
 if __name__ == "__main__":
 
     main()
-
-
-
-
