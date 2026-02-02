@@ -17,10 +17,10 @@ import logging
 import numpy as np
 import cv2
 from sympy import lambdify
-# 获取 logger 实例
+
 logger = logging.getLogger(__name__)
 
-SINGLE_EQ_TIMEOUT = 50  # [NEW] 单个方程计算超时时间(秒)
+SINGLE_EQ_TIMEOUT = 50  # [NEW] 
 
 ALLOWED_INTS = {str(i) for i in range(-9, 10) if i != 0}
 
@@ -57,12 +57,7 @@ def get_random_orthogonal_basis(dim, rng=None):
     return u, v
 # -----------------------------------------------------------------------------
 
-# [NEW] Helper from data2.py
 def contains_exp(expr_str):
-    """
-    判断字符串中是否包含 exp 或 log 函数调用
-    例如 "exp(...)"、"((log(x_1)))" 等
-    """
     pattern = r'\b(exp|log)\s*\('
     return bool(re.search(pattern, expr_str))
 
@@ -84,13 +79,8 @@ modules = {
 }
 
 
-# -----------------------------------------------------------------------------
-# [NEW] Timeout Helper Functions
-# -----------------------------------------------------------------------------
 def run_with_timeout(func, args=(), kwargs=None, timeout=SINGLE_EQ_TIMEOUT):
-    """
-    通用超时包装器。如果在 timeout 秒内 func 未完成，抛出 FunctionTimedOut 异常。
-    """
+
     if kwargs is None:
         kwargs = {}
     try:
@@ -113,7 +103,6 @@ class VisymresDataset(data.Dataset):
         self.len = metadata.total_number_of_eqs
         self.eqs_per_hdf = metadata.eqs_per_hdf
         self.word2id = metadata.word2id
-        print(self.word2id)
         self.id2word = metadata.id2word
         # print(self.id2word)
         self.data_path = data_path
@@ -169,12 +158,7 @@ def custom_collate_fn(eqs: List[Equation], cfg) -> List[torch.tensor]:
     return [res, tokens_eqs, fun_image, expr]
 
 def constants_to_placeholder(s, symbol="c"):
-
     sympy_expr = (sympify(s))
-    # print("sympy_expr",sympy_expr)
-    #sympy_expr = (sympify(sympy_expr))
-    # print("sympy",sympy_expr)
-    # save_to_csv(sympy_expr)
     eq_sympy_infix = sympy_expr.xreplace(
         Transform(
             lambda x: Symbol(symbol, real=True, nonzero=True),
@@ -197,7 +181,6 @@ def extract_variables(equations):
     return sorted(variables, key=lambda x: int(x.split('_')[1]))
 
 def sanitize_prefix(tokens):
-
     cleaned = []
     for t in tokens:
         # [新增] 处理虚数单位 I
@@ -243,7 +226,6 @@ def tokens_padding(tokens):
         y = torch.tensor(y).long()
         p_tokens[i, :] = torch.cat([y, torch.zeros(max_len - y.shape[0]).long()])
     return p_tokens
-
 
 def number_of_support_points(p, type_of_sampling_points):
     if type_of_sampling_points == "constant":
@@ -319,54 +301,41 @@ def plot_and_process(eq, curr_p, n_clusters, cfg, plt_=None, seed=None):
     except:
         center_mean = np.zeros(dim, dtype=np.float32)
         base_sigma = 1.0
-
     if N_CHANNELS == 1:
         random_power = scale_rng.uniform(np.log(0.2), np.log(5.0))
         scale_factors = np.array([np.exp(random_power)], dtype=np.float32)
     else:
         scale_factors = np.geomspace(0.2, 5.0, num=N_CHANNELS).astype(np.float32)
-
     try:
         f_numpy = lambdify(sorted_vars, eq.expr, modules='numpy')
-
         if dim == 1:
             num_points = 300
             canvas = np.zeros((img_size, img_size), dtype=np.float32)
             col_indices = np.linspace(0, img_size - 1, num_points).astype(np.int32)
-
             for ch in range(N_CHANNELS):
                 r = (3.0 * base_sigma * scale_factors[ch]).astype(np.float32)
-
                 if N_CHANNELS == 1:
                     c = 0.0 if scale_rng.rand() > 0.5 else center_mean[0]
                 else:
                     c = 0.0 if ch < (N_CHANNELS // 2) else center_mean[0]
-
                 x_vals = np.linspace(c - r, c + r, num_points, dtype=np.float32)
-
                 try:
                     canvas.fill(0)
-
                     y_vals = f_numpy(x_vals)
                     if np.ndim(y_vals) == 0:
                         y_vals = np.full_like(x_vals, float(y_vals))
                     else:
                         y_vals = y_vals.astype(np.float32, copy=False)
                     np.nan_to_num(y_vals, copy=False, nan=0.0, posinf=1e30, neginf=-1e5)
-
                     y_min, y_max = np.min(y_vals), np.max(y_vals)
                     y_range = y_max - y_min
-
                     if y_range > 1e-6:
-                        # 向量化计算坐标
                         norm_y = (y_vals - y_min) / y_range
                         y_indices = ((1.0 - norm_y) * (img_size - 1)).astype(np.int32)
-
                         pts = np.column_stack((col_indices, y_indices)).reshape((-1, 1, 2))
                         cv2.polylines(canvas, [pts], isClosed=False, color=1.0, thickness=2, lineType=cv2.LINE_AA)
                     else:
                         cv2.line(canvas, (0, img_size // 2), (img_size, img_size // 2), color=1.0, thickness=1)
-
                     funimage[:, :, ch] = torch.from_numpy(canvas)
                 except:
                     pass
@@ -375,34 +344,26 @@ def plot_and_process(eq, curr_p, n_clusters, cfg, plt_=None, seed=None):
             S_flat_norm = np.tile(s_norm, img_size)
             T_flat_norm = np.repeat(s_norm, img_size)
             z_norm_buffer = np.zeros((img_size, img_size), dtype=np.float32)
-
             for ch in range(N_CHANNELS):
                 current_radius = (base_sigma * 3.0 * scale_factors[ch]).astype(np.float32)
                 # 利用广播乘法
                 S_flat = S_flat_norm * current_radius
                 T_flat = T_flat_norm * current_radius
-
                 if seed is not None:
                     ch_rng = np.random.RandomState(seed * 100 + ch)
                 else:
                     ch_rng = local_rng
-
                 u, v = get_random_orthogonal_basis(dim, rng=ch_rng)
                 u = u.astype(np.float32, copy=False)
                 v = v.astype(np.float32, copy=False)
-
-                # 中心策略
                 if N_CHANNELS == 1:
                     use_center = np.zeros((dim, 1), dtype=np.float32) if scale_rng.rand() > 0.5 else center_mean[:,
                                                                                                      None]
                 else:
                     use_center = np.zeros((dim, 1), dtype=np.float32) if ch < (N_CHANNELS // 2) else center_mean[:,
                                                                                                      None]
-
                 X = use_center + np.outer(u, S_flat) + np.outer(v, T_flat)
-
                 args = (X[i] for i in range(dim))
-
                 try:
                     z_vals = f_numpy(*args)
 
@@ -411,27 +372,18 @@ def plot_and_process(eq, curr_p, n_clusters, cfg, plt_=None, seed=None):
                     else:
                         if np.iscomplexobj(z_vals): z_vals = z_vals.real
                         z_vals = z_vals.astype(np.float32, copy=False)
-
                         np.nan_to_num(z_vals, copy=False, nan=0.0, posinf=1e5, neginf=-1e5)
-
                         std_val = np.std(z_vals, dtype=np.float32)
                         scale_factor = std_val if std_val > 1e-6 else 1.0
-
                         np.arctan(z_vals / scale_factor, out=z_vals)
-
                         z_vals += 1.5707964
                         z_vals /= 3.1415927
-
                         np.clip(z_vals, 0.0, 1.0, out=z_vals)
-
                         funimage[:, :, ch] = torch.from_numpy(z_vals.reshape(img_size, img_size))
-
                 except Exception:
                     pass
-
     except Exception:
         pass
-
     return funimage, support
 
 def return_y(eq, support):
@@ -440,15 +392,14 @@ def return_y(eq, support):
         y = eq_numpy(support[0, :])
     else:
         y = eq_numpy(*support[0:len(eq.variables), :])
-    if np.random.rand() < 1:  # 100%的几率添加噪声
+    if np.random.rand() < 1: 
         target_noise = random.uniform(0, 0.1)
         valid_y = y[~torch.isnan(y)]
-        if valid_y.numel() > 0:  # 确保有有效数据
+        if valid_y.numel() > 0:  
             scale = target_noise * torch.sqrt(torch.mean(torch.square(valid_y))).item()
             if np.iscomplex(scale):
                 scale = scale.real
             noise = np.random.normal(loc=0.0, scale=scale, size=y.shape)
-            # 对于有 nan 的位置，噪声也设为 nan
             noise[torch.isnan(y)] = np.nan
             y = torch.tensor(y + noise, dtype=torch.float32)
         else:
@@ -456,19 +407,11 @@ def return_y(eq, support):
     return y, eq_numpy
 
 def _safe_processing_logic(eq, curr_p, cfg, plt_, seed):
-    """
-    纯函数逻辑：生成 Support, Image 和 Y。
-    用于被 func_timeout 包装。
-    """
     image, support = plot_and_process(eq, curr_p, n_clusters=cfg.n_clusters, cfg=cfg, plt_=plt_, seed=seed)
     y, _ = return_y(eq, support)
     return image, support, y
 
 def _sample_once(eq, curr_p, cfg, plt_=None):
-    """
-    单次采样 → (image, support, y, invalid_indices, success_flag)
-    增加了 run_with_timeout 保护
-    """
     try:
         seed = getattr(eq, 'seed', None)
 
@@ -478,19 +421,15 @@ def _sample_once(eq, curr_p, cfg, plt_=None):
             args=(eq, curr_p, cfg, plt_, seed),
             timeout=SINGLE_EQ_TIMEOUT
         )
-
         success = False
         invalid_indices = torch.tensor([], dtype=torch.long)
-
         if isinstance(y, torch.Tensor) and y.dtype == torch.float32:
             y = y.squeeze(0)
             invalid_indices = torch.where(
                 torch.isnan(y) | torch.isinf(y) | (abs(y) > cfg.eps_limit)
             )[0]
             success = (len(invalid_indices) <= curr_p * 0.5)
-
         return image, support, y, invalid_indices, success
-
     except FunctionTimedOut:
         logger.warning(f"Timeout skipping eq: {str(eq.expr)[:30]}...")
         return [], [], [], [], False
@@ -501,22 +440,17 @@ def evaluate_and_wrap(eqs: List[Equation], cfg):
     vals = []
     cond0 = []
     fun_image = []
-
     expr = [eq.expr for eq in eqs]
     tokens_eqs = [eq.tokenized for eq in eqs]
     tokens_eqs = tokens_padding(tokens_eqs)
-
     curr_p = number_of_support_points(cfg.max_number_of_points, cfg.type_of_sampling_points)
-
     for eq in eqs:
         # print("ewq",eq.variables)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             for retry in range(cfg.max_retry):
                 _, support, y, invalid_idx, ok = _sample_once(eq, curr_p, cfg, plt_=False)
-
                 if ok:
-
                     try:
                         seed = getattr(eq, 'seed', None)
                         image, _ = run_with_timeout(
@@ -524,35 +458,28 @@ def evaluate_and_wrap(eqs: List[Equation], cfg):
                             args=(eq, curr_p, cfg.n_clusters, cfg, True, seed),
                             timeout=SINGLE_EQ_TIMEOUT
                         )
-                        break  # 成功，跳出循环
+                        break  
                     except (FunctionTimedOut, Exception) as e:
-                        # 图像生成失败，继续重试
                         continue
             else:
                 cond0.append(False)
                 continue
-            # print(cond0)
             fun_image.append(image)
-
             y_fixed = y.clone()
             if invalid_idx.numel() > 0:
                 y_fixed[invalid_idx] = 0
                 support[:, invalid_idx] = 0
-
             concatenated = torch.cat([support, y_fixed.unsqueeze(0)], dim=0)
             vals.append(concatenated.unsqueeze(0))
             cond0.append(True)
     if not cond0:
         raise RuntimeError("All equations in batch failed or timed out.")
     cond0_tensor = torch.tensor(cond0, dtype=torch.bool)
-
     fun_image = torch.stack(fun_image, dim=0)
     res = torch.cat(vals, dim=0)
-
     expr = [e for i, e in enumerate(expr) if cond0[i]]
     tokens_eqs = tokens_eqs[cond0_tensor]
     return res, tokens_eqs, fun_image, expr
-
 
 class DataModule(pl.LightningDataModule):
     def __init__(
