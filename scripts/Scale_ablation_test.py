@@ -21,7 +21,7 @@ def main(cfg):
     metadata_path = r"C:\Users\lida\Desktop\visymre_10\scripts\weights\meta"
     fitfunc, test_data, _ = vu.setup_visymre_model(cfg, metadata_path=metadata_path)
 
-    benchmarks = pd.read_csv(r'C:\Users\lida\Desktop\visymre_10\scripts\low_benchmarks_scale.csv').to_numpy()
+    benchmarks = pd.read_csv(r'.\low_benchmarks_scale.csv').to_numpy()
 
     for line in benchmarks:
         raw_expr = line[2]
