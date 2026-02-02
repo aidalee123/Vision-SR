@@ -60,27 +60,21 @@ class AutoMagnitudeScaler:
 
     def __init__(self, verbose=False, centering=False):
         self.scales = None
-        self.centers = None  # [NEW] 存储中位数
-        self.centering = centering  # [NEW] 开关
+        self.centers = None  
+        self.centering = centering  
         self.is_bounded_detected = False
         self.verbose = verbose
         self.diagnostics = {}
     @staticmethod
     def _calculate_robust_params(arr, centering=False):
-        """同时计算 Center 和 Scale"""
         arr = np.asarray(arr)
-        # 排除 NaN/Inf
         arr = arr[np.isfinite(arr)]
-
         if len(arr) == 0: return 0.0, 1.0
-
         med_val = np.median(arr)
         center = med_val if centering else 0.0
-
         arr_centered = arr - center
         arr_abs = np.abs(arr_centered)
         arr_nonzero = arr_abs[arr_abs > 0]
-
         q75, q25 = np.percentile(arr, [75, 25])
         iqr = q75 - q25
 
@@ -132,7 +126,7 @@ class AutoMagnitudeScaler:
                     self.scales = 1.0
                 else:
                     self.scales = np.ones(X.shape[1])
-                # 如果判定为稳定函数，也不去中心化，保持原样
+            
                 if np.ndim(self.centers) == 0:
                     self.centers = 0.0
                 else:
@@ -323,20 +317,11 @@ def regularization(match):
     return num_str
 
 def coefficient_regularization(expression):
-    """
-    扫描表达式中的常数，按约定规则进行替换，并返回修改后的表达式。
-    """
-
     pattern = r'(?<![A-Za-z_])[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?'
-
     new_expression = re.sub(pattern, regularization, expression)
     return new_expression
 
 def symbolic_equivalence(true_model_expr, pred_model_str, local_dict):
-    """
-    判断预测的表达式（字符串形式）是否与给定的真值表达式（sympy 对象）等价。
-    返回1表示等价，返回0表示不等价。
-    """
     sp_model = get_symbolic_model(pred_model_str, local_dict)
     sym_diff = round_floats(true_model_expr - sp_model)
     sym_frac = round_floats(sp_model / true_model_expr)
