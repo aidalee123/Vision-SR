@@ -4,7 +4,7 @@
 train_path: data/train_data/10vars/100000
 val_path: data/val_data/10vars/1000
 test_path: data/val_data/10vars/1000
-# 请确保此路径指向您实际存在的 ckpt 文件
+
 model_path: C:\Users\lida\Desktop\visymre_10\scripts\weights\Weight.ckpt
 wandb: True
 num_of_workers: 20
@@ -21,8 +21,8 @@ dataset_train:
   num_variables: 1
   n_clusters : 1
   funimage_size: 224
-  max_retry: 3               # 允许的最大重采样次数
-  eps_limit: 1e30           # 数值溢出判据
+  max_retry: 3              
+  eps_limit: 1e30        
   total_variables: #Do not fill
   total_coefficients: #Do not fill
   max_number_of_points: 200  #2000 before
@@ -42,8 +42,8 @@ dataset_val:
   num_variables: 1
   n_clusters : 1
   funimage_size: 224
-  max_retry: 10                 # 允许的最大重采样次数
-  eps_limit: 1e100           # 数值溢出判据
+  max_retry: 10                
+  eps_limit: 1e100        
   total_variables: #Do not fill
   total_coefficients: #Do not fill
   max_number_of_points: 200
@@ -63,8 +63,8 @@ dataset_test:
   num_variables: 2
   n_clusters : 1
   funimage_size: 224
-  max_retry: 8                 # 允许的最大重采样次数
-  eps_limit: 1e30            # 数值溢出判据
+  max_retry: 8            
+  eps_limit: 1e30     
   total_variables: #Do not fill
   total_coefficients: #Do not fill constant
   max_number_of_points: 200
