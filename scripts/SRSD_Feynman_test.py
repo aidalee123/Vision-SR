@@ -13,9 +13,9 @@ import visymre_utils as vu
 warnings.filterwarnings("ignore")
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-TRAIN_SET_DIR = "/home/lida/Desktop/visymre_no10v/scripts/srsd_benchmark-feynman/medium/train"
-TEST_SET_DIR = "/home/lida/Desktop/visymre_no10v/scripts/srsd_benchmark-feynman/medium/test"
-GROUND_TRUTH_DIR = "/home/lida/Desktop/visymre_no10v/scripts/srsd_benchmark-feynman/medium/true_expr"
+TRAIN_SET_DIR = "./srsd_benchmark-feynman/medium/train"
+TEST_SET_DIR = "./srsd_benchmark-feynman/medium/test"
+GROUND_TRUTH_DIR = "./srsd_benchmark-feynman/medium/true_expr"
 
 
 def transform_expression(expression):
