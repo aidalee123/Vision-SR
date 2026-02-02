@@ -11,7 +11,6 @@ from functools import partial
 import hydra
 import warnings
 
-# === Visymre 内部依赖 (根据您的环境调整路径) ===
 try:
     from src.visymre.architectures.model import Model
     from src.visymre.dclasses import BFGSParams, FitParams
@@ -21,13 +20,7 @@ except ImportError:
 
 warnings.filterwarnings("ignore")
 
-
-# ==============================================================================
-# 1. 通用辅助函数
-# ==============================================================================
-
 def calculate_tree_size(expression_str):
-    """计算表达式复杂度 (Sympy节点数)"""
     try:
         expr = sp.sympify(expression_str)
         nodes = list(preorder_traversal(expr))
@@ -37,27 +30,23 @@ def calculate_tree_size(expression_str):
 
 
 def pad_to_10_columns(tensor):
-    """将输入 Tensor 填充至 10 列"""
     n = tensor.size(1)
     if n >= 10: return tensor[:, :10]
     return F.pad(tensor, (0, 10 - n), mode='constant', value=0)
 
 
 def get_variable_names(expr_str):
-    """提取 x_1, x_2 等变量名并排序"""
     variables = re.findall(r'x_\d+', str(expr_str))
     return sorted(set(variables), key=lambda x: int(x.split('_')[1]))
 
 
 def replace_variables(expression):
-    """标准化变量名 x, y -> x_1, x_2"""
     expression = re.sub(r'\bx\b', 'x_1', str(expression))
     expression = re.sub(r'\by\b', 'x_2', expression)
     return expression
 
 
 def round_if_needed(val):
-    """Sympy 数值四舍五入"""
     try:
         num = float(val)
         rounded = round(num, 1)
@@ -68,9 +57,7 @@ def round_if_needed(val):
     except:
         return val
 
-
 def expr_to_func(sympy_expr, variables):
-    """将 SymPy 表达式转换为 Numpy 可执行函数 (含安全保护)"""
 
     def cot(x): return 1 / np.tan(x)
 
@@ -81,12 +68,7 @@ def expr_to_func(sympy_expr, variables):
     return lambdify(variables, sympy_expr, modules=["numpy", {"cot": cot, "acot": acot, "coth": coth}])
 
 
-# ==============================================================================
-# 2. 模型初始化工具
-# ==============================================================================
-
 def setup_visymre_model(cfg, metadata_path):
-    """统一加载 Metadata 和 Model，返回 fitfunc"""
     if not os.path.exists(metadata_path):
         raise FileNotFoundError(f"Metadata not found: {metadata_path}")
 
@@ -115,19 +97,11 @@ def setup_visymre_model(cfg, metadata_path):
     model = Model.load_from_checkpoint(model_path, cfg=cfg.architecture,map_location='cpu')
     model.eval()
     model.to(cfg.inference.device)
-
-    # 绑定参数
     fitfunc = partial(model.fitfunc2, cfg_params=params_fit)
 
     return fitfunc, test_data, params_fit
 
-
-# ==============================================================================
-# 3. 归一化类 (Scalers)
-# ==============================================================================
-
 class IdentityScaler:
-    """不缩放"""
 
     def fit(self, X, y=None): pass
 
@@ -141,11 +115,10 @@ class IdentityScaler:
 
 
 class AutoMagnitudeScaler:
-    """自动量级缩放 (Log Median)"""
 
     def __init__(self, centering=False):
         self.scales = None
-        self.centering = centering  # 暂时未用，保留接口
+        self.centering = centering
 
     def _round_scale_log_median(self, arr):
         arr = np.abs(arr)
@@ -177,10 +150,7 @@ class AutoMagnitudeScaler:
             return expr.subs(subs_dict).simplify()
 
     def restore_y_expression(self, expr):
-        # Y 只是单一维度
         if self.scales is None: return expr
-        # 注意：这里假设 y 是 fit 时传入的 X (如果是单独 scaler_y)
-        # 如果是 scaler_y，scales 是标量
         return expr * self.scales
 
 
@@ -247,14 +217,8 @@ class MinMaxScaler:
         return expr * self.scale + self.min
 
 
-# ==============================================================================
-# 4. 采样与评估工具
-# ==============================================================================
-
 def sample_points(func, num_vars, range_, target_noise):
-    """均匀采样并添加噪声"""
     x = np.random.uniform(range_[0], range_[1], (200, num_vars))
-    # 简化的 evaluate
     try:
         y = func(*[x[:, i] for i in range(x.shape[1])])
         y = np.reshape(y, (-1, 1))
@@ -278,13 +242,7 @@ def sample_points(func, num_vars, range_, target_noise):
 
     return np.concatenate((x, y_noisy.reshape(-1, 1)), axis=1), y
 
-
-# ==============================================================================
-# 5. Feynman 专用常数优化 (ExpressionRefiner)
-# ==============================================================================
-
 def optimize_expression_constants(expr, X_test_dict, y_test, max_iter=1000, lr=1e-2, device="cpu"):
-    """基于 PyTorch 梯度的常数精细化"""
     from sympy import Symbol
 
     class SymPyExpressionModule(nn.Module):
@@ -293,8 +251,6 @@ def optimize_expression_constants(expr, X_test_dict, y_test, max_iter=1000, lr=1
             self.original_expr = expr
             self.device = device
             self.variables = sorted([str(s) for s in expr.free_symbols])
-
-            # 提取常数
             constants, symbol_map = [], {}
             expr_subs = expr
 
@@ -307,8 +263,6 @@ def optimize_expression_constants(expr, X_test_dict, y_test, max_iter=1000, lr=1
                     symbol_map[node] = sym
                     constants.append(float(node))
                     expr_subs = expr_subs.subs(node, sym)
-
-            # 添加全局线性变换 c1*expr + c2
             c1, c2 = Symbol(f"p_scale"), Symbol(f"p_bias")
             symbol_map["scale"], symbol_map["bias"] = c1, c2
             constants += [1.0, 0.0]
@@ -321,7 +275,6 @@ def optimize_expression_constants(expr, X_test_dict, y_test, max_iter=1000, lr=1
                 for v in constants
             ])
 
-            # 编译为 Torch 函数
             expr_code = str(self.expr)
             for i, sym in enumerate(self.symbol_map):
                 expr_code = expr_code.replace(str(sym), f"params[{i}]")
@@ -358,5 +311,6 @@ def optimize_expression_constants(expr, X_test_dict, y_test, max_iter=1000, lr=1
         loss.backward()
         optimizer.step()
         if loss.item() < 1e-6: break
+
 
     return model.to_sympy_expr()
