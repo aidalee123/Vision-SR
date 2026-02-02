@@ -202,7 +202,6 @@ class Model(pl.LightningModule):
             self.MultiModalEncoder.visual_encoder,
             self.MultiModalEncoder.vq_layer
         ]
-
         for module in modules_to_freeze:
             # 切换到评估模式 (对 ResNet 的 BN 层至关重要)
             module.eval()
@@ -223,7 +222,6 @@ class Model(pl.LightningModule):
             current_epoch=self.current_epoch,
             batch_idx=batch_idx
         )
-
         # Compute Loss
         (loss, loss_sr_student , loss_sr_teacher, loss_vq, loss_token,
          acc_top1,acc_top5,sentinel_usage,contrastive_loss,acc_top3,noise_ratio_bias)= self.compute_loss(output_logits_student, output_logits_teacher, aux_losses, trg)
@@ -296,8 +294,8 @@ class Model(pl.LightningModule):
         w2i = test_data.word2id
         unary_names = ['abs', 'asin', 'cos', 'exp', 'ln', 'sin', 'sqrt', 'tan']
         binary_names = ['add', 'div', 'mul', 'pow', 'sub']
-        transcendental_names = [ 'cos', 'exp', 'ln', 'sin', 'tan']
-        # transcendental_names = []
+        #transcendental_names = [ 'cos', 'exp', 'ln', 'sin', 'tan']
+        transcendental_names = []
         arity_1_ids = {w2i[name] for name in unary_names if name in w2i}
         arity_2_ids = {w2i[name] for name in binary_names if name in w2i}
         all_op_ids = arity_1_ids | arity_2_ids
