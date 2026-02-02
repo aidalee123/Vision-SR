@@ -12,8 +12,8 @@ import visymre_utils as vu
 
 warnings.filterwarnings("ignore")
 
-ODE_DATA_DIR = '/home/lida/Desktop/visymre_no10v/scripts/ode-strogatz-master/ode-strogatz-master'
-ODE_LABELS_FILE = '/home/lida/Desktop/visymre_no10v/scripts/ode-strogatz-master/ode.xlsx'
+ODE_DATA_DIR = './ode-strogatz-master'
+ODE_LABELS_FILE = './ode.xlsx'
 
 
 @hydra.main(config_name="config", version_base='1.1')
