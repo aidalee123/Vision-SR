@@ -7,14 +7,11 @@ import sympy as sp
 from sklearn.metrics import r2_score
 import hydra
 import warnings
-
-# === 引入公共库 ===
 import visymre_utils as vu
 
 warnings.filterwarnings("ignore")
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-# 请确保此路径指向你的 datasets_first/firstprinciples 文件夹
 FIRST_PRINCIPLES_ROOT = os.path.join(SCRIPT_DIR, 'datasets_first', 'firstprinciples')
 
 target_datasets = [
@@ -34,7 +31,7 @@ def load_srbench_data(dataset_name):
     file_path = next((p for p in possible_paths if os.path.exists(p)), None)
 
     if not file_path:
-        print(f"[错误] 找不到数据文件: {dataset_name}")
+        print(f"[Error] Data file not found: {dataset_name}")
         return None, None
 
     try:
@@ -44,26 +41,24 @@ def load_srbench_data(dataset_name):
         if data_values.shape[0] == 0: return None, None
         return data_values[:, :-1], data_values[:, -1]
     except Exception as e:
-        print(f"[读取失败] {dataset_name}: {e}")
+        print(f"[Read Failed] {dataset_name}: {e}")
         return None, None
 
 
 @hydra.main(config_name="config", version_base='1.1')
 def main(cfg):
-    # 初始化模型
     metadata_path = r"C:\Users\lida\Desktop\visymre_10\scripts\weights\meta"
     fitfunc, test_data, _ = vu.setup_visymre_model(cfg, metadata_path)
 
     total_start = time.time()
 
-    for _ in range(5):  # Run 5 times
+    for run_idx in range(5):  # Run 5 times
         for ds_name in target_datasets:
-            print(f"\n{'=' * 60}\n正在处理数据集: {ds_name}")
+            print(f"\n{'=' * 60}\nProcessing dataset: {ds_name}")
 
             X_raw, y_raw = load_srbench_data(ds_name)
             if X_raw is None or len(X_raw) == 0: continue
 
-            # 数据集划分
             indices = np.random.permutation(len(y_raw))
             split_point = int(len(y_raw) * 0.75)
             train_idx, test_idx = indices[:split_point], indices[split_point:]
@@ -72,24 +67,23 @@ def main(cfg):
             X_test_full, y_test_full = X_raw[test_idx], y_raw[test_idx]
 
             best_record = None
-            best_r2_for_dataset = -np.inf
+            # Track best based on training performance
+            best_r2_train = -np.inf
+
             start_time_ds = time.time()
 
-            # Scalers 预初始化
             scaler_x_obj = vu.AutoMagnitudeScaler(centering=False)
             scaler_y_obj = vu.AutoMagnitudeScaler(centering=False)
 
             for iter_idx in range(20):  # Iterations
-                # 采样
+
                 n_samples = 200
                 sub_indices = np.random.choice(len(X_train_full), size=n_samples, replace=len(X_train_full) < n_samples)
                 X_curr, y_curr = X_train_full[sub_indices], y_train_full[sub_indices]
 
-                # 混合策略: 前10轮 Raw, 后10轮 Scaled
                 apply_scaling = (iter_idx >= 10)
 
                 if apply_scaling:
-                    # 使用全量训练数据 fit 更稳
                     scaler_x_obj.fit(X_train_full, y=y_train_full)
                     scaler_y_obj.fit(y_train_full)
                     X_input = scaler_x_obj.transform(X_curr)
@@ -99,7 +93,7 @@ def main(cfg):
                     X_input, y_input = X_curr, y_curr
                     scale_tag = "[Raw   ]"
 
-                # 构造输入
+                # Input construction
                 X_tensor = vu.pad_to_10_columns(torch.tensor(X_input, dtype=torch.float32))
                 y_tensor = torch.tensor(y_input, dtype=torch.float32).reshape(-1, 1)
 
@@ -109,7 +103,7 @@ def main(cfg):
 
                     pre_expr_sym = sp.sympify(output['best_bfgs_preds'][0])
 
-                    # 还原表达式
+                    # Restore expression
                     if apply_scaling:
                         expr_step1 = scaler_x_obj.restore_x_expression(pre_expr_sym)
                         final_expr_sym = scaler_y_obj.restore_y_expression(expr_step1)
@@ -118,47 +112,79 @@ def main(cfg):
 
                     final_expr_str = str(final_expr_sym)
 
-                    # 评估
+                    # --- 1. Evaluate on Training Set (for Selection) ---
                     variables = vu.get_variable_names(final_expr_str)
+                    func = None
+                    if variables:
+                        func = sp.lambdify(variables, final_expr_sym, modules="numpy")
+
                     if not variables:
-                        y_pred = np.full(len(y_test_full), float(final_expr_sym) if final_expr_sym.is_Number else 0.0)
+                        y_pred_train = np.full(len(y_train_full),
+                                               float(final_expr_sym) if final_expr_sym.is_Number else 0.0)
                     else:
-                        X_eval = {}
+                        X_eval_train = {}
                         for var in variables:
                             idx = int(var.split('_')[1]) - 1
-                            X_eval[var] = X_test_full[:, idx] if idx < X_test_full.shape[1] else np.zeros(
-                                len(y_test_full))
+                            X_eval_train[var] = X_train_full[:, idx] if idx < X_train_full.shape[1] else np.zeros(
+                                len(y_train_full))
+                        y_pred_train = func(**X_eval_train)
 
-                        func = sp.lambdify(variables, final_expr_sym, modules="numpy")
-                        y_pred = func(**X_eval)
+                    if isinstance(y_pred_train, (float, int)): y_pred_train = np.full(len(y_train_full), y_pred_train)
+                    if np.iscomplexobj(y_pred_train): y_pred_train = y_pred_train.real
+                    y_pred_train = np.nan_to_num(y_pred_train, nan=0.0)
 
-                    # 数值清理
-                    if isinstance(y_pred, (float, int)): y_pred = np.full(len(y_test_full), y_pred)
-                    if np.iscomplexobj(y_pred): y_pred = y_pred.real
-                    y_pred = np.nan_to_num(y_pred, nan=0.0)
+                    r2_train = r2_score(y_train_full, y_pred_train)
 
-                    r2 = r2_score(y_test_full, y_pred)
+                    print(f"  [Iter {iter_idx:02d}] {scale_tag} Train R2: {r2_train:.4f} | {final_expr_str}")
 
-                    print(f"  [Iter {iter_idx:02d}] {scale_tag} R2: {r2:.4f} | {final_expr_str}")
+                    # --- 2. Update Best Record if Train R2 improves ---
+                    if r2_train > best_r2_train:
+                        best_r2_train = r2_train
 
-                    if r2 > best_r2_for_dataset:
-                        best_r2_for_dataset = r2
+                        # Calculate Test R2 (Reporting only)
+                        if not variables:
+                            y_pred_test = np.full(len(y_test_full),
+                                                  float(final_expr_sym) if final_expr_sym.is_Number else 0.0)
+                        else:
+                            X_eval_test = {}
+                            for var in variables:
+                                idx = int(var.split('_')[1]) - 1
+                                X_eval_test[var] = X_test_full[:, idx] if idx < X_test_full.shape[1] else np.zeros(
+                                    len(y_test_full))
+                            y_pred_test = func(**X_eval_test)
+
+                        if isinstance(y_pred_test, (float, int)): y_pred_test = np.full(len(y_test_full), y_pred_test)
+                        if np.iscomplexobj(y_pred_test): y_pred_test = y_pred_test.real
+                        y_pred_test = np.nan_to_num(y_pred_test, nan=0.0)
+
+                        r2_test = r2_score(y_test_full, y_pred_test)
+
                         best_record = {
                             'dataset': ds_name, 'true_expr': "Unknown", 'pre_expr': final_expr_str,
-                            'r2': r2, 'sr': -1, 'complexity': vu.calculate_tree_size(final_expr_str),
-                            'time': time.time() - start_time_ds, 'beam': 50, 'scaled': apply_scaling
+                            'r2_test': r2_test, 'r2_train': r2_train,
+                            'sr': -1, 'complexity': vu.calculate_tree_size(final_expr_str),
+                            'time': time.time() - start_time_ds, 'beam': 50, 'scaled': apply_scaling,
+                            'run': run_idx
                         }
 
-                    if r2 > 0.999: break
+                    # --- 3. Early Stopping based on Train R2 ---
+                    if r2_train > 0.999:
+                        break
 
                 except Exception as e:
                     continue
 
             if best_record:
-                csv_file = 'visymre_results_first.csv'
-                df_curr = pd.DataFrame([best_record])
+                print(f"Final {ds_name}: Test R2={best_record['r2_test']:.4f} | Expr={best_record['pre_expr']}")
+
+                csv_file = 'First_Principles_test.csv'
+                # Ensure we save the test R2 as the main 'r2' column for consistency with other tools, or keep distinct
+                save_record = best_record.copy()
+                save_record['r2'] = best_record['r2_test']  # Main R2 column is Test R2
+
+                df_curr = pd.DataFrame([save_record])
                 df_curr.to_csv(csv_file, mode='a', header=not os.path.isfile(csv_file), index=False)
-                print(f"  >>> {ds_name} Best R2: {best_record['r2']:.4f} (Saved)")
+                print(f"  >>> Saved result to {csv_file}")
 
     print(f"\nCompleted. Total time: {(time.time() - total_start):.2f}s")
 
