@@ -128,10 +128,6 @@ class ResNetVisualEncoder(nn.Module):
         x = self.norm(x)
         return x
 
-
-# ---------------------------------------------------------------------
-# [Vector Quantizer] Codebook
-# ---------------------------------------------------------------------
 class VectorQuantizer(nn.Module):
     def __init__(self, num_embeddings, embedding_dim, commitment_cost=0.25, diversity_weight=0.1):
         super().__init__()
@@ -170,9 +166,6 @@ class VectorQuantizer(nn.Module):
         return self.embedding(indices)
 
 
-# ---------------------------------------------------------------------
-# [Spatial Token Predictor]
-# ---------------------------------------------------------------------
 class VirtualVisualDecoder(nn.Module):
     def __init__(self, hidden_dim, num_image_tokens, num_patches=49, nuum_layer=2, num_heads=8):
         super().__init__()
@@ -198,13 +191,7 @@ class VirtualVisualDecoder(nn.Module):
         return logits
 
 
-# ---------------------------------------------------------------------
-# [Fusion Module] Standard Cross-Attention (TEACHER / STANDARD)
-# ---------------------------------------------------------------------
 class CrossAttentionFusion(pl.LightningModule):
-    """
-    [修改] 增加了返回 Attention Weight 的功能，用于消融实验对比。
-    """
 
     def __init__(self, hidden_dim, num_heads, norm_inputs=True):
         super().__init__()
@@ -229,28 +216,18 @@ class CrossAttentionFusion(pl.LightningModule):
         self.norm_out = nn.LayerNorm(hidden_dim)
 
     def forward(self, x, y):
-        # x: Query, y: Key/Value
         residual = x
         x_norm = self.norm_q(x)
         y_norm = self.norm_k(y)
-
-        # [关键修改] need_weights=True 以获取权重
         attn_out, attn_weights = self.attention(
             query=x_norm, key=y_norm, value=y_norm,
             need_weights=True
         )
-        # PyTorch MultiheadAttention 返回的 attn_weights 形状是 [B, L_query, L_key]
-        # 它已经对 Heads 进行了平均 (Average over heads)
-
         x = residual + attn_out
-
-        # FFN Block
         residual = x
         x_norm = self.norm_ff(x)
         ff_out = self.ff(x_norm)
         out = residual + ff_out
-
-        # 返回: Output, Sentinel(None), Weights
         return out, None, attn_weights
 
 class BiasCrossAttentionFusion(nn.Module):
@@ -261,29 +238,18 @@ class BiasCrossAttentionFusion(nn.Module):
         self.num_heads = num_heads
         self.hidden_dim = hidden_dim
         self.head_dim = hidden_dim // num_heads
-
         self.vis_save_dir = vis_save_dir
         os.makedirs(self.vis_save_dir, exist_ok=True)
-
         assert self.head_dim * num_heads == self.hidden_dim, "hidden_dim error"
-
         self.w_q = nn.Linear(hidden_dim, hidden_dim, bias=True)
         self.w_k = nn.Linear(hidden_dim, hidden_dim, bias=True)
         self.w_v = nn.Linear(hidden_dim, hidden_dim, bias=True)
         self.w_out = nn.Linear(hidden_dim, hidden_dim, bias=True)
-
         self.geo_q_proj = nn.Linear(hidden_dim, bias_proj_dim, bias=True)
         self.geo_k_proj = nn.Linear(hidden_dim, bias_proj_dim, bias=True)
-
         self.pos_scale = nn.Parameter(torch.tensor(2.0))
-
         self.neg_scale = nn.Parameter(torch.tensor(50.0))
-
         self.attn_logit_scale = nn.Parameter(torch.log(torch.tensor(10.0)))
-
-        # ------------------------------------------------------------------
-        # 3. Norms & FFN
-        # ------------------------------------------------------------------
         self.norm_q = nn.LayerNorm(hidden_dim)
         self.norm_kv = nn.LayerNorm(hidden_dim)
         self.norm_out = nn.LayerNorm(hidden_dim)
@@ -298,45 +264,29 @@ class BiasCrossAttentionFusion(nn.Module):
         B, N, D = dataset_features.shape
         M = visual_features.shape[1]
         residual = dataset_features
-
         q_in = self.norm_q(dataset_features)
         kv_in = self.norm_kv(visual_features)
-
         geo_q = self.geo_q_proj(q_in)
         geo_k = self.geo_k_proj(kv_in)
         bias_raw = torch.bmm(F.normalize(geo_q, p=2), F.normalize(geo_k, p=2).transpose(1, 2))
-
         bias_pos = F.relu(bias_raw) * self.pos_scale
-
         bias_neg = -F.relu(-bias_raw) * self.neg_scale
-
         full_bias = bias_pos + bias_neg
-
         q = self.w_q(q_in).view(B, N, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.w_k(kv_in).view(B, M, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.w_v(kv_in).view(B, M, self.num_heads, self.head_dim).transpose(1, 2)
-
         attn_logits = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.head_dim)
-
         attn_logits = attn_logits * self.attn_logit_scale.exp()
-
-        # 3. 融合：Attn + Bias
         scores = attn_logits + full_bias.unsqueeze(1)
-
         attn_weights = F.softmax(scores, dim=-1)
-
         out = torch.matmul(attn_weights, v).transpose(1, 2).contiguous().view(B, N, D)
         out = self.w_out(out)
-
         out = residual + out
         residual = out
         out = self.norm_out(out)
         out = residual + self.ff(out)
-
         return out
-# ---------------------------------------------------------------------
-# [Main] MultiModalEncoder
-# ---------------------------------------------------------------------
+
 class MultiModalEncoder(pl.LightningModule):
     def __init__(self, cfg):
         super().__init__()
@@ -447,23 +397,19 @@ class MultiModalEncoder(pl.LightningModule):
 
             _, topk_indices = torch.topk(pred_logits, k=self.top_k, dim=-1)
             visual_features_student = self.vq_layer.get_codebook_entry(topk_indices).flatten(1, 2)
-
             # Alignment Loss
             loss_cl = self.compute_codebook_contrastive_loss(
                 dataset_features=dataset_features,
                 teacher_indices=gt_indices,
-                vq_layer=self.vq_layer  # <--- 【关键修改】传入 VQ 实例，而不是 embedding 层
+                vq_layer=self.vq_layer  
             )
             aux_losses['contrastive_loss'] = loss_cl
 
-            # ==========================================================
-            # 1. Bias Fusion (Student / Ours)
-            # ==========================================================
             fused_out_student = self.fusion_module_student(
                 dataset_features, visual_features_student
             )
 
-            with torch.no_grad():  # 通常只用于统计，不传梯度
+            with torch.no_grad(): 
                 _, _, attn_weights_std = self.fusion_module_teacher(
                     dataset_features, visual_features_student
                 )
