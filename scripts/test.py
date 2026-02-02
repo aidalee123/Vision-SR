@@ -176,7 +176,7 @@ def main(cfg):
     fitfunc = partial(model.fitfunc2, cfg_params=params_fit)
     # Ensure batch is valid
 
-    expr = "x_1+x_2"
+    expr = "x_1**2"
     range_ = [-1,1]
     sym_eq = sympify(expr)
     variables = get_variable_names(str(expr))
