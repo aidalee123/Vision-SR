@@ -24,8 +24,6 @@ def main(cfg):
     files = [f for f in os.listdir(ODE_DATA_DIR) if os.path.isfile(os.path.join(ODE_DATA_DIR, f))]
     df_labels = pd.read_excel(ODE_LABELS_FILE)
 
-    results = []
-
     for i in range(6):  # Run 6 times
         for filename in files:
             print(f"Processing: {filename}")
@@ -39,7 +37,6 @@ def main(cfg):
             data = np.loadtxt(filepath, delimiter=',')
 
             target_noise = 0.0
-            # Initialize lists to track both train and test metrics
             r2_train_list, r2_test_list, solut, pre_expr_list, num_node = [], [], [], [], []
             start_time = time.time()
 
@@ -53,8 +50,6 @@ def main(cfg):
                 # Split & Noise
                 indices = np.random.permutation(len(data))
                 split_idx = int(0.75 * len(data))
-
-                # Noise Logic (on y/target which is column 0 here)
                 scale = target_noise * np.sqrt(np.mean(np.square(data[indices[:split_idx], 0])))
                 noise = np.random.normal(0, scale, data[indices[:split_idx], 0].shape)
                 data[indices[:split_idx], 0] += noise
@@ -73,7 +68,6 @@ def main(cfg):
                     X_test = torch.tensor(test_set[:, 1:])
                     y_test = torch.tensor(test_set[:, 0])
 
-                    # Pad
                     X_padded = vu.pad_to_10_columns(X)
                     X_test_padded = vu.pad_to_10_columns(X_test)
 
@@ -81,7 +75,7 @@ def main(cfg):
                         output = fitfunc(X_padded, y.squeeze(), cfg_params=cfg.inference, test_data=test_data)
                         pre_expr = sp.sympify(output['best_bfgs_preds'][0])
 
-                        # Common Setup for Eval
+                        
                         variables = vu.get_variable_names(str(pre_expr))
                         func = sp.lambdify(",".join(variables), pre_expr)
 
@@ -115,32 +109,14 @@ def main(cfg):
                     solut.append(sr)
                     num_node.append(comp)
                     pre_expr_list.append(str(pre_expr))
-
-                    # Early stopping based on Training R2
                     if max(r2_train_list) > 0.999: break
-
-                # Break outer loop if Training R2 is good enough
                 if max(r2_train_list) >= 0.999: break
 
             elapsed = time.time() - start_time
             
-            # Select best model based on Training R2
             best_idx = r2_train_list.index(max(r2_train_list))
 
-            # Store results using the Test R2 of that specific model
-            results.append([
-                filename, formula_str, pre_expr_list[best_idx],
-                r2_test_list[best_idx], solut[best_idx], elapsed,
-                num_node[best_idx], target_noise, i
-            ])
-            
-            # Log selection info to console
             print(f"Selected based on Train R2={r2_train_list[best_idx]:.4f} -> Test R2={r2_test_list[best_idx]:.4f}")
-
-            pd.DataFrame(results, columns=['filename', 'true_expr', 'pre_expr', 'r2', 'sr', 't', 'Complexity', 'noise',
-                                           'Iteration']) \
-                .to_csv('visymre_ode_result0.csv', index=False)
-
 
 if __name__ == "__main__":
     main()
